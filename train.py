@@ -99,6 +99,7 @@ def train(opt):
             state = next_state
             continue
         if len(replay_memory) < opt.replay_memory_size / 10:
+            print(f'len(replay_memory)={len(replay_memory)}<{opt.replay_memory_size / 10}\t')
             continue
         epoch += 1
         batch = sample(replay_memory, min(len(replay_memory), opt.batch_size))
