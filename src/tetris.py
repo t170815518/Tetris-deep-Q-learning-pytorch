@@ -80,19 +80,19 @@ class Tetris:
         return rotated_array
 
     def get_state_properties(self, board):
-        lines_cleared, board = self.check_cleared_rows(board)
-        holes = self.get_holes(board)
-        bumpiness, height = self.get_bumpiness_and_height(board)
+        lines_cleared, board = self.check_cleared_rows(board)   # 计算清除的行数和更新后的游戏区域
+        holes = self.get_holes(board)   # 计算游戏区域中的空洞数
+        bumpiness, height = self.get_bumpiness_and_height(board)    # 计算游戏区域的凹凸度和高度
 
         return torch.FloatTensor([lines_cleared, holes, bumpiness, height])
 
     def get_holes(self, board):
         num_holes = 0
-        for col in zip(*board):
+        for col in zip(*board): # 遍历游戏区域的每一列
             row = 0
-            while row < self.height and col[row] == 0:
+            while row < self.height and col[row] == 0:  # 找到这一列的第一个方块
                 row += 1
-            num_holes += len([x for x in col[row + 1:] if x == 0])
+            num_holes += len([x for x in col[row + 1:] if x == 0])  # 统计这个方块下面的空洞数
         return num_holes
 
     def get_bumpiness_and_height(self, board):
@@ -109,27 +109,31 @@ class Tetris:
 
     def get_next_states(self):
         states = {}
-        piece_id = self.ind
-        curr_piece = [row[:] for row in self.piece]
-        if piece_id == 0:  # O piece
+        piece_id = self.ind     # 获取当前方块的ID
+        curr_piece = [row[:] for row in self.piece]     # 获取当前方块的形状
+
+        # 根据方块的类型确定旋转的次数
+        if piece_id == 0:  # O型方块旋转前后形状不变，所以num_rotations = 1
             num_rotations = 1
         elif piece_id == 2 or piece_id == 3 or piece_id == 4:
             num_rotations = 2
         else:
             num_rotations = 4
 
+        # 对每一种旋转，计算所有可能的状态
         for i in range(num_rotations):
+            # 计算方块可以放置的x位置的数量
             valid_xs = self.width - len(curr_piece[0])
-            for x in range(valid_xs + 1):
+            for x in range(valid_xs + 1):   # 遍历每一个可能的x位置
                 piece = [row[:] for row in curr_piece]
                 pos = {"x": x, "y": 0}
-                while not self.check_collision(piece, pos):
+                while not self.check_collision(piece, pos):    # 如果方块在当前位置没有碰撞，则向下移动一格
                     pos["y"] += 1
-                self.truncate(piece, pos)
-                board = self.store(piece, pos)
-                states[(x, i)] = self.get_state_properties(board)
-            curr_piece = self.rotate(curr_piece)
-        return states
+                self.truncate(piece, pos)   # 如果方块超出了游戏区域，则截断方块
+                board = self.store(piece, pos)  # 将方块放置在游戏区域，并获取新的游戏区域
+                states[(x, i)] = self.get_state_properties(board)   # 计算新的游戏状态的属性，并存储在状态字典中
+            curr_piece = self.rotate(curr_piece)    # 旋转方块以进行下一次迭代
+        return states   # 返回所有可能的下一个状态，每个x和旋转次数对应一个状态
 
     def get_current_board_state(self):
         board = [x[:] for x in self.board]
@@ -152,10 +156,12 @@ class Tetris:
 
     def check_collision(self, piece, pos):
         future_y = pos["y"] + 1
-        for y in range(len(piece)):
+        for y in range(len(piece)):     # 遍历方块的每一个格子
             for x in range(len(piece[y])):
+                # 如果方块的下一步位置超出了游戏区域的高度，或者方块的下一步位置与游戏区域上已有的方块冲突，则返回True，表示会发生碰撞
                 if future_y + y > self.height - 1 or self.board[future_y + y][pos["x"] + x] and piece[y][x]:
                     return True
+        # 如果没有发生碰撞，则返回False
         return False
 
     def truncate(self, piece, pos):
@@ -167,28 +173,35 @@ class Tetris:
                     if y > last_collision_row:
                         last_collision_row = y
 
+        # 如果方块的下一步位置超出了游戏区域的高度，并且存在碰撞
         if pos["y"] - (len(piece) - last_collision_row) < 0 and last_collision_row > -1:
+            # 当存在碰撞并且方块的高度大于1时，删除方块的第一行，并将游戏结束标志设为True
             while last_collision_row >= 0 and len(piece) > 1:
                 gameover = True
                 last_collision_row = -1
                 del piece[0]
+                # 重新计算最后碰撞行
                 for y in range(len(piece)):
                     for x in range(len(piece[y])):
                         if self.board[pos["y"] + y][pos["x"] + x] and piece[y][x] and y > last_collision_row:
                             last_collision_row = y
+        # 返回游戏是否结束
         return gameover
 
     def store(self, piece, pos):
         board = [x[:] for x in self.board]
+        # 遍历方块的每一个格子
         for y in range(len(piece)):
             for x in range(len(piece[y])):
+                # 如果方块的当前格子是实心的，并且在游戏区域的对应位置是空的
                 if piece[y][x] and not board[y + pos["y"]][x + pos["x"]]:
+                    # 将方块的当前格子放置到游戏区域的对应位置
                     board[y + pos["y"]][x + pos["x"]] = piece[y][x]
         return board
 
     def check_cleared_rows(self, board):
         to_delete = []
-        for i, row in enumerate(board[::-1]):
+        for i, row in enumerate(board[::-1]):   # 从下到上遍历游戏区域的每一行
             if 0 not in row:
                 to_delete.append(len(board) - 1 - i)
         if len(to_delete) > 0:
@@ -231,6 +244,11 @@ class Tetris:
         return score, self.gameover
 
     def render(self, video=None):
+        """
+        渲染俄罗斯方块的界面。俄罗斯方块的空间是一张图片。
+        :param video:
+        :return:
+        """
         if not self.gameover:
             img = [self.piece_colors[p] for row in self.get_current_board_state() for p in row]
         else:
@@ -246,7 +264,7 @@ class Tetris:
 
         img = np.concatenate((img, self.extra_board), axis=1)
 
-
+        # 在图像上添加游戏得分、方块数量和清除的行数
         cv2.putText(img, "Score:", (self.width * self.block_size + int(self.block_size / 2), self.block_size),
                     fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1.0, color=self.text_color)
         cv2.putText(img, str(self.score),
